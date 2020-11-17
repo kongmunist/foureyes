@@ -45,7 +45,7 @@ def find_good_matches(desc1, desc2):
 
     # Not all matches are good, filter out the bad uing lowe's ratio criterion from:
     # https://docs.opencv.org/3.4/d5/d6f/tutorial_feature_flann_matcher.html
-    ratio_thresh = 0.75
+    ratio_thresh = 0.6
     good_matches = []
     for m, n in matches:
         if m.distance < ratio_thresh * n.distance:
@@ -75,6 +75,7 @@ def getGoodMatches(im1, im2):
 
 def addImage(baseIm, newIm, finalSize):
     matches, kps_1, kps_2 = getGoodMatches(newIm, baseIm)
+    print("keypoints found:", len(kps_1))
     homo, _ = cv2.findHomography(np.array(kps_1), np.array(kps_2),
                                  method=cv2.RANSAC, ransacReprojThreshold=2)
 
@@ -82,20 +83,12 @@ def addImage(baseIm, newIm, finalSize):
     h2, w2, _ = baseIm.shape
 
     warped_image = cv2.warpPerspective(newIm, homo, finalSize)
-
-    # print("baseim shape:", baseIm.shape)
-    # print("finalsize:", finalSize)
-
-    if (baseIm.shape[0] == finalSize[1] and baseIm.shape[1] == finalSize[0]):
-        print("adding base image")
-        # warped_image += baseIm*(warped_image == 0)
-        baseIm += warped_image * (baseIm == 0)
-        warped_image = baseIm
-        # warped_image += baseIm*(warped_image == 0)
-    else:
-        warped_image[0:baseIm.shape[0], 0:baseIm.shape[1]] = baseIm
-    cv2.imwrite("keyIm.jpg", warped_image)
-    return warped_image
+    # return warped_image
+    # Experiment:
+    fin = np.zeros(( finalSize[1], finalSize[0], 3))
+    fin[0:baseIm.shape[0], 0:baseIm.shape[1]] = baseIm
+    combined = fin * (warped_image == 0) + warped_image
+    return combined.astype("uint8")
 
 
 def cropOutBlack(im):
@@ -105,7 +98,8 @@ def cropOutBlack(im):
                                            cv2.CHAIN_APPROX_SIMPLE)
     cnt = contours[0]
     x, y, w, h = cv2.boundingRect(cnt)
-    return im[x:(x+w), y:(y+h)]
+    # return im[x:(x+w), y:(y+h)]
+    return im[y:(y+h),x:(x+w)]
 
 
 def perspectiveWarpPreserveBounds(im1, im2):
@@ -114,7 +108,7 @@ def perspectiveWarpPreserveBounds(im1, im2):
 
     # Calculate the homography    source             destination
     homo, _ = cv2.findHomography(np.array(im1_keypoints), np.array(im2_keypoints),
-                                 method=cv2.RANSAC, ransacReprojThreshold=2)
+                                 method=cv2.RANSAC, ransacReprojThreshold=3)
 
     # Find the corner bounds
     h, w, _ = im2.shape
@@ -143,3 +137,16 @@ def perspectiveWarpPreserveBounds(im1, im2):
     print("x_adj:", x_adj)
     print("y_adj:", y_adj)
     return cv2.warpPerspective(im2, homo, (int(max(x_corners)), int(max(y_corners))))
+
+
+# # Experiment to try and get the seams to line up. did not work.
+# nonz_combined = combined[combined != 0]
+# nonz_combined2 = combined2[combined2 != 0]
+#
+# comb1_sum = nonz_combined.mean()*nonz_combined.shape[0]
+# comb2_sum = nonz_combined2.mean()*nonz_combined2.shape[0]
+# diff = (comb1_sum - comb2_sum)/nonz_combined2.shape[0]
+#
+# newcomb2 = ((combined2 + (diff))*[combined2 != 0])[0]
+#
+# combined3 = addImage(combined.astype(np.float32), newcomb2.astype(np.float32), finalSize)
